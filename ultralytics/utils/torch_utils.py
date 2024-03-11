@@ -11,6 +11,7 @@ from typing import Union
 
 import numpy as np
 import torch
+import torch_musa
 import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
@@ -90,8 +91,8 @@ def select_device(device="", batch=0, newline=False, verbose=True):
             devices when using multiple GPUs.
 
     Examples:
-        >>> select_device('cuda:0')
-        device(type='cuda', index=0)
+        >>> select_device('musa:0')
+        device(type='musa', index=0)
 
         >>> select_device('cpu')
         device(type='cpu')
@@ -114,9 +115,9 @@ def select_device(device="", batch=0, newline=False, verbose=True):
     elif device:  # non-cpu device requested
         if device == "cuda":
             device = "0"
-        visible = os.environ.get("CUDA_VISIBLE_DEVICES", None)
-        os.environ["CUDA_VISIBLE_DEVICES"] = device  # set environment variable - must be before assert is_available()
-        if not (torch.cuda.is_available() and torch.cuda.device_count() >= len(device.split(","))):
+        visible = os.environ.get("MUSA_VISIBLE_DEVICES", None)
+        os.environ["MUSA_VISIBLE_DEVICES"] = device  # set environment variable - must be before assert is_available()
+        if not (torch.musa.is_available() and torch.musa.device_count() >= len(device.split(","))):
             LOGGER.info(s)
             install = (
                 "See https://pytorch.org/get-started/locally/ for up-to-date torch install instructions if no "
@@ -134,7 +135,7 @@ def select_device(device="", batch=0, newline=False, verbose=True):
                 f"{install}"
             )
 
-    if not cpu and not mps and torch.cuda.is_available():  # prefer GPU if available
+    if not cpu and not mps and torch.musa.is_available():  # prefer GPU if available
         devices = device.split(",") if device else "0"  # range(torch.cuda.device_count())  # i.e. 0,1,6,7
         n = len(devices)  # device count
         if n > 1 and batch > 0 and batch % n != 0:  # check batch_size is divisible by device_count
@@ -144,9 +145,9 @@ def select_device(device="", batch=0, newline=False, verbose=True):
             )
         space = " " * (len(s) + 1)
         for i, d in enumerate(devices):
-            p = torch.cuda.get_device_properties(i)
-            s += f"{'' if i == 0 else space}CUDA:{d} ({p.name}, {p.total_memory / (1 << 20):.0f}MiB)\n"  # bytes to MB
-        arg = "cuda:0"
+            p = torch.musa.get_device_properties(i)
+            s += f"{'' if i == 0 else space}MUSA:{d} ({p.name}, {p.total_memory / (1 << 20):.0f}MiB)\n"  # bytes to MB
+        arg = "musa:0"
     elif mps and TORCH_2_0 and torch.backends.mps.is_available():
         # Prefer MPS if available
         s += f"MPS ({get_cpu_info()})\n"
