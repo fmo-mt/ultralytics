@@ -11,11 +11,20 @@ from ultralytics.utils import yaml_load, ROOT
 class YOLOv7(Model):
     """YOLO (You Only Look Once) object detection model."""
 
-    def __init__(self, model="yolov7.yaml", task=None, verbose=False):
+    def __init__(self, model="yolov7.yaml", hyp=None, task=None, verbose=False):
         """Initialize YOLO model, switching to YOLOWorld if model filename contains '-world'."""
-        path = Path(model)
         # Continue with default YOLO initialization
         super().__init__(model=model, task=task, verbose=verbose)
+        nl = self.model.model[-1].nl
+        hyp['box'] *= 3. / nl  # scale to layers
+        hyp['cls'] *= 80 / 80. * 3. / nl  # scale to classes and layers
+        hyp['obj'] *= (640 / 640) ** 2 * 3. / nl  # scale to image size and layers
+        hyp['label_smoothing'] = 0.0
+        self.model.nc = 80 # for coco
+        self.model.hyp = hyp
+        self.model.gr = 1.0
+        # self.model.class_weights = labels_to_class_weights(dataset.labels, nc)
+        # self.model.names = names
 
     @property
     def task_map(self):
@@ -24,7 +33,7 @@ class YOLOv7(Model):
             "detect": {
                 "model": yolov7.Model,
                 "trainer": yolov7.DetectionTrainerv7,
-                "validator": yolo.detect.DetectionValidator,
+                "validator": yolov7.validator.DetectionValidatorv7,
                 "predictor": yolo.detect.DetectionPredictor,
             },
         }

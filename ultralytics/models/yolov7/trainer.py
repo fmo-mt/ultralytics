@@ -5,11 +5,12 @@ import random
 from copy import copy
 
 import numpy as np
+import torch
 import torch.nn as nn
 
 from ultralytics.data import build_dataloader, build_yolo_dataset
 from ultralytics.engine.trainer import BaseTrainer
-from ultralytics.models import yolo, yolov7
+from ultralytics.models import yolov7
 from ultralytics.utils import LOGGER, RANK
 from ultralytics.utils.plotting import plot_images, plot_labels, plot_results
 from ultralytics.utils.torch_utils import de_parallel, torch_distributed_zero_first
@@ -51,6 +52,8 @@ class DetectionTrainerv7(BaseTrainer):
             LOGGER.warning("WARNING ⚠️ 'rect=True' is incompatible with DataLoader shuffle, setting shuffle=False")
             shuffle = False
         workers = self.args.workers if mode == "train" else self.args.workers * 2
+        if mode == "val":
+            batch_size = min(32, batch_size // 2)
         return build_dataloader(dataset, batch_size, workers, shuffle, rank)  # return dataloader
 
     def preprocess_batch(self, batch):
@@ -70,6 +73,7 @@ class DetectionTrainerv7(BaseTrainer):
                 ]  # new shape (stretched to gs-multiple)
                 imgs = nn.functional.interpolate(imgs, size=ns, mode="bilinear", align_corners=False)
             batch["img"] = imgs
+        batch["targets"] = torch.cat([batch["batch_idx"].view(-1, 1), batch["cls"], batch["bboxes"]], 1).to(self.device)
         return batch
 
     def set_model_attributes(self):
@@ -92,7 +96,7 @@ class DetectionTrainerv7(BaseTrainer):
     def get_validator(self):
         """Returns a DetectionValidator for YOLO model validation."""
         self.loss_names = "box_loss", "cls_loss", "dfl_loss"
-        return yolo.detect.DetectionValidator(
+        return yolov7.validator.DetectionValidatorv7(
             self.test_loader, save_dir=self.save_dir, args=copy(self.args), _callbacks=self.callbacks
         )
 
